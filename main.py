@@ -14,7 +14,7 @@ MANDATORY_FILES = [
     "2.2.0 - Dauer der Gleissperrungen, gesperrte Gleise, Weichen.docx",
     "3.0.0 - Geschwindigkeitseinschränkungen und andere Besonderheiten für Zugfahrten.docx",
     "4.0.0 - Zuständige Berechtigte.docx",
-    "4.1.0 - Fahrdienstleiter-Weichenwärter-Zugleiter-BözM.docx",
+    "4.1.0 - Fahrdienstleiter Weichenwärter Zugleiter BözM.docx",
     "4.2.0 - Technischer Berechtigter - UV-Berechtigter.docx",
     "5.0.0 - Betriebliche Regelungen.docx",
     "5.1.0 - Regelungen für die Sicherung des Bahnbetriebes.docx",
@@ -42,11 +42,10 @@ CATEGORIES = {
     "BÜ": ["5.1.22", "5.1.23", "5.1.24", "5.1.25", "5.1.26", "5.1.27", "5.1.28", "5.3.11"],
     "Lfst (Pkt. 3)": ["3.1.", "3.2."],
     "VorGWB": ["5.1.20", "5.1.21"],
-    "UntArb": ["5.3.4", "5.3.6"]
+    "Alle": ["0.", "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9."]
 }
 
-# --- NEU: SPALTEN-LAYOUT-DEFINITION (basierend auf deinem Bild) ---
-# Weist jede Kapitel-Gruppe einer Hauptspalten-Nummer (0-4) zu.
+
 COLUMN_LAYOUT = {
     "0": 0,
     "1": 0,
@@ -63,10 +62,10 @@ COLUMN_LAYOUT = {
     "8": 4,
     "9": 4,
     "10": 4,
-    "Unsortiert": 5  # Fallback
+    "Unsortiert": 5
 }
-NUM_MAIN_COLUMNS = 6  # Anzahl der Hauptspalten (0-5)
-
+NUM_MAIN_COLUMNS = 6
+version = "0.2a"
 
 # ---------------------
 
@@ -78,8 +77,8 @@ def natural_sort_key(s):
 class WordMergerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("BetraBuilder - Word Merger (Grid-Layout)")
-        self.root.geometry("1400x1300")
+        self.root.title("Betra Builder v" + version)
+        self.root.geometry("1450x700")
 
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
@@ -224,7 +223,7 @@ class WordMergerApp:
             messagebox.showinfo("Keine Dateien", "Keine .docx Dateien im 'modules'-Ordner gefunden.")
             return
 
-        wrap_length_pixels = 215
+        wrap_length_pixels = 220
         main_columns = []
         for i in range(NUM_MAIN_COLUMNS):
             main_col_frame = ttk.Frame(self.scrollable_frame)
@@ -245,7 +244,7 @@ class WordMergerApp:
                 group_frame = ttk.Frame(parent_frame, padding=5, borderwidth=1, relief="sunken")
                 group_frame.pack(side=tk.TOP, fill="x", anchor="n", pady=5)
 
-                title = f"Kap. {layout_key}" if layout_key != "Unsortiert" else "Unsortiert"
+                title = f"Punkt {layout_key}" if layout_key != "Unsortiert" else "Unsortiert"
                 title_label = ttk.Label(group_frame, text=title, font=("-default-", 10, "bold"),
                                         wraplength=wrap_length_pixels, justify=tk.LEFT)
                 title_label.pack(pady=(0, 5), anchor="w")
@@ -349,7 +348,7 @@ class WordMergerApp:
             "Name: Dennis Heinze, I.IA-W-N-HA-B\n"
             "E-Mail: dennis.heinze@deutschebahn.com\n"
             "Telefon (dienstlich): 0152 33114237\n"
-            "Version: 0.1a - 08.11.2025"
+            "Version: " + version + "\n\n"
         )
         messagebox.showinfo("Kontakt", kontakt_text)
 
