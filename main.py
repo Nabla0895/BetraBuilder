@@ -3,12 +3,11 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import glob
 import sys
+import re
 from docx import Document
 from docxcompose.composer import Composer
 
 # --- KONFIGURATION ---
-# Trage hier die Dateinamen ein, die immer aktiv und gesperrt sein sollen.
-# (Exakte Dateinamen aus dem 'modules'-Ordner)
 MANDATORY_FILES = [
     "0.0.0 - Deckblatt.docx",
     "1.0.0 - Lage der Baustelle, Lageplanskizze.docx",
@@ -35,13 +34,12 @@ MANDATORY_FILES = [
     "7.0.0 - Verantwortliche.docx",
     "8.0.0 - Angaben zur Bautechnologie-Bauablauf-Baustellenlogistik.docx",
     "9.0.0 - Sonstige Angaben.docx",
-    "9.1.0 - Anlagen - Zugestimmt - Verteiler.docx"
+    "10.0.0 - Anlagen - Zugestimmt - Verteiler.docx"
 ]
 
-# Definieren Sie hier Ihre Kategorien als "Button-Text": ["Präfix1", "Präfix2", ...]
 CATEGORIES = {
-    "Oberleitung": ["2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.3.5", "2.3.6", "4.3.0", "5.3.20"],
-    "Baugleis": ["3.0.", "3.1.", "3.2.", "5.1.11", "5.3.14", "5.3.15", "5.3.16", "5.3.17", "5.3.18", "5.3.21"],
+    "Oberleitung": ["2.3.", "4.3.0", "5.3.20"],
+    "Baugleis": ["5.1.11", "5.3.14", "5.3.15", "5.3.16", "5.3.17", "5.3.18", "5.3.21"],
     "BÜ": ["5.1.22", "5.1.23", "5.1.24", "5.1.25", "5.1.26", "5.1.27", "5.1.28", "5.3.11"],
     "Lfst (Pkt. 3)": ["3.1.", "3.2."],
     "VorGWB": ["5.1.20", "5.1.21"],
@@ -51,14 +49,17 @@ CATEGORIES = {
 
 # ---------------------
 
+def natural_sort_key(s):
+    filename = os.path.basename(s)
+    return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', filename)]
+
 
 class WordMergerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("BetraBuilder - Word Merger (Spalten-Layout)")
-        self.root.geometry("1000x600")  # Breiter/Höher für Spalten
+        self.root.geometry("1500x600")
 
-        # --- Pfade ---
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
         else:
@@ -68,40 +69,30 @@ class WordMergerApp:
         self.output_dir = os.path.join(base_path, "output")
 
         self.checkbox_items = []
-
-        # --- Haupt-Frame ---
         main_frame = ttk.Frame(root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         info_label = ttk.Label(main_frame, text=f"Module aus: '{self.modules_dir}'", font=("-default-", 9, "italic"))
         info_label.pack(anchor="w")
 
-        # --- Checkbox-Liste (mit X- und Y-Scrollbars) ---
         list_frame = ttk.Frame(main_frame, padding=(0, 10, 0, 0))
         list_frame.pack(fill=tk.BOTH, expand=True)
 
-        # X Scrollbar (unten)
         x_scrollbar = ttk.Scrollbar(list_frame, orient="horizontal")
         x_scrollbar.pack(side="bottom", fill="x")
-
-        # Y Scrollbar (rechts)
         y_scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
         y_scrollbar.pack(side="right", fill="y")
 
-        # Canvas (füllt den Rest)
         self.canvas = tk.Canvas(list_frame)
         self.canvas.pack(side="left", fill="both", expand=True)
 
-        # Scrollbars mit Canvas verknüpfen
         self.canvas.configure(yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
         x_scrollbar.configure(command=self.canvas.xview)
         y_scrollbar.configure(command=self.canvas.yview)
 
-        # Das Frame, das gescrollt wird
         self.scrollable_frame = ttk.Frame(self.canvas)
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
 
-        # Scroll-Region an die Größe des Frames anpassen
         self.scrollable_frame.bind(
             "<Configure>",
             lambda e: self.canvas.configure(
@@ -109,7 +100,13 @@ class WordMergerApp:
             )
         )
 
-        # --- Kategorie-Buttons ---
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind("<Button-4>", self._on_mousewheel)
+        self.canvas.bind("<Button-5>", self._on_mousewheel)
+        self.scrollable_frame.bind("<MouseWheel>", self._on_mousewheel)
+        self.scrollable_frame.bind("<Button-4>", self._on_mousewheel)
+        self.scrollable_frame.bind("<Button-5>", self._on_mousewheel)
+
         category_frame = ttk.Frame(main_frame)
         category_frame.pack(fill=tk.X, pady=(10, 5))
 
@@ -123,10 +120,8 @@ class WordMergerApp:
             btn = ttk.Button(btn_container,
                              text=text,
                              command=lambda p=prefixes: self.toggle_category(p))
-            # Buttons einfach nebeneinander packen
             btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
 
-        # --- Haupt-Buttons (Reset/Start) ---
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(10, 0))
 
@@ -139,72 +134,114 @@ class WordMergerApp:
 
         self.load_files()
 
+    def _on_mousewheel(self, event):
+        if sys.platform == "linux":
+            if event.num == 4:
+                self.canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                self.canvas.yview_scroll(1, "units")
+        else:
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
     def load_files(self):
         if not os.path.isdir(self.modules_dir):
             messagebox.showerror("Fehler", f"Der Ordner '{self.modules_dir}' wurde nicht gefunden.")
             self.root.quit()
             return
 
-        # Alte Einträge löschen
         for item in self.checkbox_items:
             item["widget"].destroy()
         self.checkbox_items.clear()
 
-        # Kinder des scrollbaren Frames löschen (alte Spalten)
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
         search_path = os.path.join(self.modules_dir, "*.docx")
-        # WICHTIG: Sortierte Liste aller Dateien (definiert die Merge-Reihenfolge)
         file_paths = glob.glob(search_path)
-        file_paths.sort()
+
+        file_paths.sort(key=natural_sort_key)
 
         if not file_paths:
             messagebox.showinfo("Keine Dateien", "Keine .docx Dateien im 'modules'-Ordner gefunden.")
             return
 
-        # --- Spalten-Logik ---
-        column_frames = {}  # Speichert die Spalten-Frames (z.B. "0": frame0, "1": frame1)
+        column_frames = {}
+        wrap_length_pixels = 220
 
         for file_path in file_paths:
+            # Voller Dateiname, z.B. "5.1.1. - Text.docx"
             filename = os.path.basename(file_path)
 
-            # Schlüssel für die Spalte extrahieren (z.B. "0", "1", "2", "5")
             try:
                 chapter_key = filename.split('.')[0]
             except IndexError:
-                chapter_key = "Unsortiert"  # Fallback
+                chapter_key = "Unsortiert"
 
-            # Prüfen, ob für dieses Kapitel schon ein Frame existiert
             if chapter_key not in column_frames:
-                # Neue Spalte (Frame) erstellen
                 col_frame = ttk.Frame(self.scrollable_frame, padding=5, borderwidth=1, relief="sunken")
                 col_frame.pack(side=tk.LEFT, fill=tk.Y, anchor="n", padx=5, pady=5)
 
-                # Titel für die Spalte
                 title = f"Kap. {chapter_key}.x" if chapter_key.isdigit() else chapter_key
-                ttk.Label(col_frame, text=title, font=("-default-", 10, "bold")).pack(pady=(0, 5))
+                title_label = ttk.Label(col_frame, text=title, font=("-default-", 10, "bold"),
+                                        wraplength=wrap_length_pixels, justify=tk.LEFT)
+                title_label.pack(pady=(0, 5), anchor="w")
 
-                # Frame im Dictionary speichern
                 column_frames[chapter_key] = col_frame
+
+                col_frame.bind("<MouseWheel>", self._on_mousewheel)
+                col_frame.bind("<Button-4>", self._on_mousewheel)
+                col_frame.bind("<Button-5>", self._on_mousewheel)
+                title_label.bind("<MouseWheel>", self._on_mousewheel)
+                title_label.bind("<Button-4>", self._on_mousewheel)
+                title_label.bind("<Button-5>", self._on_mousewheel)
             else:
-                # Existierendes Frame holen
                 col_frame = column_frames[chapter_key]
 
-            # --- Checkbox erstellen (Logik von vorher) ---
+            # Prüfung nutzt den vollen Dateinamen
             is_mandatory = filename in MANDATORY_FILES
             var = tk.BooleanVar(value=is_mandatory)
             cb_state = "disabled" if is_mandatory else "normal"
 
-            cb = ttk.Checkbutton(col_frame, text=filename, variable=var, state=cb_state)
-            cb.pack(anchor="w", padx=10, pady=2)
+            item_frame = ttk.Frame(col_frame)
+            item_frame.pack(fill='x', anchor="w", pady=1)
 
-            # Wichtig: Wir speichern die Items in der sortierten Reihenfolge (file_paths)
-            # NICHT in der Spaltenreihenfolge.
+            cb = ttk.Checkbutton(item_frame, variable=var, state=cb_state)
+            cb.pack(side=tk.LEFT, anchor="n", padx=(0, 5))
+
+            # --- ÄNDERUNG HIER ---
+            # Erstelle den Anzeigenamen OHNE .docx
+            display_name = filename
+            if filename.endswith(".docx"):
+                display_name = filename[:-5]
+            # (Alternative für Python 3.9+: display_name = filename.removesuffix(".docx"))
+
+            # Verwende 'display_name' für das Label
+            label = ttk.Label(item_frame, text=display_name, wraplength=wrap_length_pixels, justify=tk.LEFT)
+            # --------------------
+
+            label.pack(side=tk.LEFT, fill='x', expand=True)
+
+            def on_label_click(event, cb_widget=cb, cb_var=var):
+                if cb_widget.cget("state") == "normal":
+                    cb_var.set(not cb_var.get())
+
+            label.bind("<Button-1>", on_label_click)
+
+            item_frame.bind("<MouseWheel>", self._on_mousewheel)
+            item_frame.bind("<Button-4>", self._on_mousewheel)
+            item_frame.bind("<Button-5>", self._on_mousewheel)
+            cb.bind("<MouseWheel>", self._on_mousewheel)
+            cb.bind("<Button-4>", self._on_mousewheel)
+            cb.bind("<Button-5>", self._on_mousewheel)
+            label.bind("<MouseWheel>", self._on_mousewheel)
+            label.bind("<Button-4>", self._on_mousewheel)
+            label.bind("<Button-5>", self._on_mousewheel)
+
+            # Speichere den *vollen* Dateinamen für die interne Logik
             self.checkbox_items.append({
                 "var": var,
                 "path": file_path,
-                "filename": filename,
+                "filename": filename,  # <-- voller Name
                 "widget": cb,
                 "is_mandatory": is_mandatory
             })
@@ -212,7 +249,6 @@ class WordMergerApp:
         self.start_button["state"] = "normal"
 
     def reset_selection(self):
-        """Setzt alle Checkboxen auf den Startzustand zurück."""
         for item in self.checkbox_items:
             if not item["is_mandatory"]:
                 item["var"].set(False)
@@ -220,15 +256,12 @@ class WordMergerApp:
                 item["var"].set(True)
 
     def toggle_category(self, prefixes):
-        """
-        Schaltet alle (nicht-obligatorischen) Dateien um,
-        die mit einem der Präfixe beginnen.
-        """
         items_in_category = []
         for item in self.checkbox_items:
-            if item["is_mandatory"]:
+            if item["is_mandatory"] or item["widget"].cget("state") == "disabled":
                 continue
 
+            # Die Präfix-Prüfung nutzt den vollen 'filename'
             for prefix in prefixes:
                 if item["filename"].startswith(prefix):
                     items_in_category.append(item)
@@ -244,7 +277,6 @@ class WordMergerApp:
             item["var"].set(new_state)
 
     def start_merge(self):
-        # Sammelt die Dateien in der *sortierten Listenreihenfolge*
         selected_files = []
         for item in self.checkbox_items:
             if item["var"].get():
@@ -254,7 +286,6 @@ class WordMergerApp:
             messagebox.showwarning("Keine Auswahl", "Es ist keine Datei ausgewählt.")
             return
 
-        # Output-Ordner und Speicherpfad
         try:
             os.makedirs(self.output_dir, exist_ok=True)
         except Exception as e:
@@ -263,7 +294,7 @@ class WordMergerApp:
 
         save_path = filedialog.asksaveasfilename(
             initialdir=self.output_dir,
-            initialfile="Betra_Zusammenstellung.docx",
+            initialfile="Betra F33 XXXX-26.docx",
             defaultextension=".docx",
             filetypes=[("Word-Dokumente", "*.docx"), ("Alle Dateien", "*.*")],
             title="Zieldatei speichern unter..."
@@ -272,7 +303,6 @@ class WordMergerApp:
         if not save_path:
             return
 
-        # Merge-Prozess
         try:
             self.start_button.config(text="Arbeite...", state="disabled")
             self.root.update_idletasks()
@@ -287,24 +317,30 @@ class WordMergerApp:
             self.start_button.config(text="Ausgewählte Dateien zusammenfügen", state="normal")
 
     def merge_documents(self, file_paths, save_path):
-        """
-        Fügt Word-Dokumente mit docxcompose zusammen (ohne Seitenumbrüche).
-        """
         if not file_paths:
             return
+
+        if not os.path.exists(file_paths[0]):
+            raise FileNotFoundError(f"Die Basis-Datei konnte nicht gefunden werden: {file_paths[0]}")
 
         master_doc = Document(file_paths[0])
         composer = Composer(master_doc)
 
         if len(file_paths) > 1:
             for file_path in file_paths[1:]:
-                doc_to_append = Document(file_path)
-                composer.append(doc_to_append)
+                if not os.path.exists(file_path):
+                    print(f"Warnung: Datei übersprungen (nicht gefunden): {file_path}")
+                    continue
+                try:
+                    doc_to_append = Document(file_path)
+                    composer.append(doc_to_append)
+                except Exception as e_inner:
+                    print(f"Fehler beim Anhängen von {file_path}: {e_inner}")
+                    pass
 
         composer.save(save_path)
 
 
-# --- Hauptprogramm starten ---
 if __name__ == "__main__":
     root = tk.Tk()
     app = WordMergerApp(root)
