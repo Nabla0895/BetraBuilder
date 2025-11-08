@@ -184,6 +184,10 @@ class WordMergerApp:
         else:
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
+    def _on_label_click(self, event, cb_widget, cb_var):
+        if cb_widget.cget("state") == "normal":
+            cb_var.set(not cb_var.get())
+
     def _get_layout_key(self, filename):
         parts = filename.split('.')
         if not parts:
@@ -277,11 +281,8 @@ class WordMergerApp:
             label = ttk.Label(item_frame, text=display_name, wraplength=wrap_length_pixels, justify=tk.LEFT)
             label.pack(side=tk.LEFT, fill='x', expand=True)
 
-            def on_label_click(event, cb_widget=cb, cb_var=var):
-                if cb_widget.cget("state") == "normal":
-                    cb_var.set(not cb_var.get())
-
-            label.bind("<Button-1>", on_label_click)
+            label.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(e, w, v))
+            item_frame.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(e, w, v))
 
             item_frame.bind("<MouseWheel>", self._on_mousewheel)
             item_frame.bind("<Button-4>", self._on_mousewheel)
