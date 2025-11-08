@@ -78,7 +78,7 @@ class WordMergerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Betra Builder v" + version)
-        self.root.geometry("1450x700")
+        self.root.geometry("1410x700")
 
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
