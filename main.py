@@ -65,7 +65,7 @@ COLUMN_LAYOUT = {
     "Unsortiert": 5
 }
 NUM_MAIN_COLUMNS = 6
-version = "0.2a"
+version = "0.3a"
 
 # ---------------------
 
@@ -184,8 +184,8 @@ class WordMergerApp:
         else:
             self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def _on_label_click(self, event, cb_widget, cb_var):
-        if cb_widget.cget("state") == "normal":
+    def _on_label_click(self, cb_widget, cb_var):
+        if cb_widget.instate(['!disabled']):
             cb_var.set(not cb_var.get())
 
     def _get_layout_key(self, filename):
@@ -278,11 +278,12 @@ class WordMergerApp:
             if filename.endswith(".docx"):
                 display_name = filename[:-5]
 
+            #label = tk.Label(item_frame, text=display_name, wraplength=wrap_length_pixels, justify=tk.LEFT)
             label = ttk.Label(item_frame, text=display_name, wraplength=wrap_length_pixels, justify=tk.LEFT)
             label.pack(side=tk.LEFT, fill='x', expand=True)
 
-            label.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(e, w, v))
-            item_frame.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(e, w, v))
+            label.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(w, v))
+            #item_frame.bind("<Button-1>", lambda e, w=cb, v=var: self._on_label_click(w, v))
 
             item_frame.bind("<MouseWheel>", self._on_mousewheel)
             item_frame.bind("<Button-4>", self._on_mousewheel)
