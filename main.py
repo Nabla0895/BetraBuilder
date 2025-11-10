@@ -5,6 +5,8 @@ import glob
 import sys
 import re
 import configparser
+from datetime import datetime  # Neu für AEL-Datum
+import openpyxl  # Neu für Excel-Export (muss mit 'pip install openpyxl' installiert werden)
 from docx import Document
 from docxcompose.composer import Composer
 
@@ -58,7 +60,7 @@ COLUMN_LAYOUT = {
     "Unsorted": 5
 }
 NUM_MAIN_COLUMNS = 6
-APP_VERSION = "0.9a"  # Version erhöht
+APP_VERSION = "1.0a"  # Version erhöht
 
 
 # ---------------------
@@ -70,7 +72,7 @@ def natural_sort_key(s):
 
 
 class FileNameDialog(simpledialog.Dialog):
-    """Custom dialog to ask for the document type and serial number."""
+    """Custom dialog to ask for doc type, serial number, and AEL option."""
 
     def __init__(self, parent, title):
         self.result = None
@@ -95,6 +97,14 @@ class FileNameDialog(simpledialog.Dialog):
         self.entry_widget.pack(side=tk.LEFT)
         num_frame.pack(pady=5)
 
+        # --- NEUE AEL-CHECKBOX ---
+        ael_frame = ttk.Frame(frame)
+        self.ael_var = tk.BooleanVar(value=False)
+        ael_check = ttk.Checkbutton(ael_frame, text="AEL-Verrechnung", variable=self.ael_var)
+        ael_check.pack(side=tk.LEFT, padx=5, pady=5)
+        ael_frame.pack()
+        # --- ENDE NEU ---
+
         return self.entry_widget
 
     def validate(self):
@@ -105,7 +115,12 @@ class FileNameDialog(simpledialog.Dialog):
         return 1
 
     def apply(self):
-        self.result = (self.doc_type_var.get(), self.entry_var.get().strip())
+        # Result ist jetzt ein 3-Tuple
+        self.result = (
+            self.doc_type_var.get(),
+            self.entry_var.get().strip(),
+            self.ael_var.get()
+        )
 
 
 class InitialConfigDialog(simpledialog.Dialog):
@@ -119,7 +134,6 @@ class InitialConfigDialog(simpledialog.Dialog):
     def body(self, frame):
         self.rb_var = tk.StringVar()
         self.network_var = tk.StringVar()
-        # Year variable removed
 
         # 1. Regionalbereich (RB)
         rb_frame = ttk.Frame(frame)
@@ -136,9 +150,8 @@ class InitialConfigDialog(simpledialog.Dialog):
         self.network_combo.pack(side=tk.LEFT, padx=5, pady=5)
         network_frame.pack()
 
-        # 3. Year (REMOVED)
-        # Static info label about the fixed year
-        year_info_label = ttk.Label(frame, text="Das Jahr ist fest auf 2026 eingestellt (Textbausteine 2026).",
+        # 3. Year
+        year_info_label = ttk.Label(frame, text="Das Jahr ist fest auf 2026 eingestellt (Module 2026).",
                                     font=("-default-", 9, "italic"))
         year_info_label.pack(pady=(10, 0))
 
@@ -152,7 +165,6 @@ class InitialConfigDialog(simpledialog.Dialog):
         selected_rb = self.rb_var.get()
         networks = self.network_data.get(selected_rb, {})
 
-        # Format for display: "F33 - Netz Hagen"
         network_display_list = []
         for code, name in networks.items():
             network_display_list.append(f"{code} - {name}")
@@ -177,13 +189,11 @@ class InitialConfigDialog(simpledialog.Dialog):
     def apply(self):
         """Parses the result when OK is clicked."""
         try:
-            # Parse "F33 - Netz Hagen"
             full_network_string = self.network_var.get()
             parts = full_network_string.split(" - ", 1)
             code_full = parts[0].strip()
             name = parts[1].strip()
 
-            # Year is no longer selected, it's hardcoded in ask_for_initial_config
             self.result = (code_full, name)
         except Exception as e:
             print(f"Dialog apply error: {e}")
@@ -218,7 +228,7 @@ class WordMergerApp:
         self.settings = {}
 
         # Data variables
-        self.network_data = {}  # Holds parsed BetraNetzziffern.txt
+        self.network_data = {}
         self.cover_pages = []
         self.selected_cover_page = tk.StringVar()
         self.checkbox_items = []
@@ -839,7 +849,7 @@ class WordMergerApp:
     def show_help(self):
         """Displays the help/instructions messagebox."""
         help_text = (
-            "Anleitung Betra Builder (v0.9a)\n\n"  # Version angepasst
+            "Anleitung Betra Builder (v1.0a)\n\n"  # Version angepasst
             "1. Wählen Sie oben das gewünschte Deckblatt aus der Liste aus.\n\n"
             "2. Pflichtmodule sind bereits ausgewählt und können nicht abgewählt werden.\n\n"
             "3. Wählen Sie optionale Module aus, indem Sie die Haken setzen (Klick auf den Haken oder den Text).\n\n"
@@ -847,6 +857,8 @@ class WordMergerApp:
             "5. Mit 'Auswahl zurücksetzen' werden alle optionalen Module abgewählt.\n\n"
             "6. Klicken Sie auf 'Ausgewählte Dateien zusammenfügen', geben Sie die laufende Nummer an.\n"
             "   -> Die Datei wird im 'output'-Ordner in einem eigenen Unterordner gespeichert.\n\n"
+            "7. AEL-Verrechnung: Setzen Sie den Haken, um nach dem Speichern eine Projektnummer\n"
+            "   für die Excel-Datei 'AEL-Verrechnung.xlsx' einzugeben.\n\n"
             "--- \n"
             "Eigene Presets:\n"
             "Mit 'Presets bearbeiten' können Sie die 5 Preset-Buttons an Ihre Bedürfnisse anpassen.\n\n"
@@ -908,25 +920,27 @@ class WordMergerApp:
             messagebox.showerror("Fehler", f"Konnte den Output-Ordner nicht erstellen:\n{e}")
             return
 
-        # 5. Get Filename
+        # 5. Get Filename and AEL option
         dialog = FileNameDialog(self.root, "Dateiname festlegen")
         if not dialog.result:
             return
 
-        doc_type, serial_num = dialog.result
-
+        # (MODIFIZIERT) Entpackt jetzt 3 Werte
+        doc_type, serial_num, ael_checked = dialog.result
 
         base_name = f"{doc_type} {self.settings['regional_code_full']} {serial_num}-{self.settings['year']}"
         new_folder_path = os.path.join(self.output_dir, base_name)
         file_name_with_ext = f"{base_name}.docx"
         save_path = os.path.join(new_folder_path, file_name_with_ext)
 
+        # 6. Create subfolder
         try:
             os.makedirs(new_folder_path, exist_ok=True)
         except Exception as e:
             messagebox.showerror("Fehler", f"Konnte den Unterordner nicht erstellen:\n{new_folder_path}\n\nFehler: {e}")
             return
 
+        # 7. Check existence
         if os.path.exists(save_path):
             relative_file_name = os.path.join(base_name, file_name_with_ext)
             if not messagebox.askyesno("Warnung",
@@ -934,7 +948,7 @@ class WordMergerApp:
                                        parent=self.root):
                 return
 
-        # 7. Run the merge process
+        # 8. Run the merge process
         try:
             self.start_button.config(text="Arbeite...", state="disabled")
             self.root.update_idletasks()
@@ -942,11 +956,82 @@ class WordMergerApp:
             self.merge_documents(selected_files_for_merge, save_path)
 
             messagebox.showinfo("Erfolg", f"Dateien erfolgreich zusammengefügt!\nGespeichert als: {save_path}")
+
+            # --- (NEUE AEL-LOGIK) ---
+            if ael_checked:
+                project_num = simpledialog.askstring("AEL-Verrechnung",
+                                                     "Bitte Projektnummer eingeben:",
+                                                     parent=self.root)
+
+                # Fährt nur fort, wenn der Nutzer nicht "Abbrechen" klickt und etwas eingibt
+                if project_num:
+                    today_date = datetime.now().strftime("%d.%m.%Y")
+                    # Wir verwenden base_name, z.B. "Betra F33 1234-26"
+                    self.update_ael_excel(project_num, today_date, base_name)
+            # --- (ENDE NEUE AEL-LOGIK) ---
+
         except Exception as e:
             messagebox.showerror("Fehler", f"Ein Fehler ist aufgetreten:\n{e}\n\n"
                                            f"Hinweis: Stellen Sie sicher, dass die Zieldatei (falls sie existiert) geschlossen ist.")
         finally:
             self.start_button.config(text="Ausgewählte Dateien zusammenfügen", state="normal")
+
+    # --- NEUE METHODE ---
+    def update_ael_excel(self, project_num, today_date, file_base_name):
+        """Erstellt oder aktualisiert die AEL-Verrechnung.xlsx im output-Ordner."""
+
+        excel_path = os.path.join(self.output_dir, "AEL-Verrechnung.xlsx")
+        headers = ["Projektnummer", "Datum", "Name"]
+        new_row = [project_num, today_date, file_base_name]
+
+        try:
+            if not os.path.exists(excel_path):
+                # Datei existiert nicht -> Neu erstellen mit Kopfzeile
+                wb = openpyxl.Workbook()
+                sheet = wb.active
+                sheet.title = "Verrechnung"
+                sheet.append(headers)
+                sheet.append(new_row)
+            else:
+                # Datei existiert -> Laden und Zeile anhängen
+                wb = openpyxl.load_workbook(excel_path)
+                sheet = wb.active
+
+                # (Optional) Prüfen, ob die Kopfzeile korrekt ist
+                if sheet["A1"].value != headers[0]:
+                    # Wenn die Datei komisch formatiert ist, einfach anhängen
+                    print("Warnung: AEL-Excel-Kopfzeile weicht ab, Zeile wird trotzdem angehängt.")
+
+                sheet.append(new_row)
+
+            # Spaltenbreite automatisch anpassen (optional, aber nützlich)
+            for col in sheet.columns:
+                max_length = 0
+                column = col[0].column_letter  # Spaltenbuchstabe
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+                adjusted_width = (max_length + 2)
+                sheet.column_dimensions[column].width = adjusted_width
+
+            wb.save(excel_path)
+            messagebox.showinfo("AEL-Verrechnung",
+                                f"Excel-Datei '{excel_path}' erfolgreich aktualisiert.",
+                                parent=self.root)
+
+        except PermissionError:
+            messagebox.showerror("Fehler (Excel)",
+                                 f"Speichern fehlgeschlagen!\nDie Datei '{excel_path}' ist eventuell geöffnet.\n\n"
+                                 "Bitte schließen Sie die Datei und tragen Sie die Zeile manuell ein:\n"
+                                 f"Projekt: {project_num}\nDatum: {today_date}\nName: {file_base_name}",
+                                 parent=self.root)
+        except Exception as e:
+            messagebox.showerror("Fehler (Excel)",
+                                 f"Ein unerwarteter Fehler beim Speichern der Excel-Datei ist aufgetreten:\n{e}",
+                                 parent=self.root)
 
     def merge_documents(self, file_paths, save_path):
         """
