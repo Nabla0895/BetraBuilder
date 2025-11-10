@@ -9,7 +9,6 @@ from docx import Document
 from docxcompose.composer import Composer
 
 # --- CONFIGURATION ---
-# These filenames are data and must match the files in the 'modules' directory.
 MANDATORY_FILES = [
     "1.0.0 - Lage der Baustelle, Lageplanskizze.docx",
     "2.1.0 - Arbeitszeit.docx",
@@ -38,10 +37,8 @@ MANDATORY_FILES = [
     "9.1.0 - Anlagen - Zugestimmt - Verteiler.docx"
 ]
 
-# --- (MODIFIZIERT) CATEGORIES wurde entfernt, wird jetzt aus presets.ini geladen ---
-NUM_PRESETS = 5  # --- NEU ---
+NUM_PRESETS = 5
 
-# Defines which chapter key maps to which UI column index.
 COLUMN_LAYOUT = {
     "0": 0,
     "1": 0,
@@ -61,7 +58,7 @@ COLUMN_LAYOUT = {
     "Unsorted": 5
 }
 NUM_MAIN_COLUMNS = 6
-APP_VERSION = "0.4a"  # Updated version
+APP_VERSION = "0.8a"  # Version erhöht
 
 
 # ---------------------
@@ -72,19 +69,14 @@ def natural_sort_key(s):
     return [int(c) if c.isdigit() else c.lower() for c in re.split('([0-9]+)', filename)]
 
 
-# --- CUSTOM DIALOG FOR FILENAME INPUT ---
 class FileNameDialog(simpledialog.Dialog):
-    """
-    A custom dialog to ask the user for the document type ("Betra" or "BA")
-    and the serial number (YYYY).
-    """
+    """Custom dialog to ask for the document type and serial number."""
 
     def __init__(self, parent, title):
         self.result = None
         super().__init__(parent, title)
 
     def body(self, frame):
-        # 1. Document Type (Radiobuttons)
         type_frame = ttk.Frame(frame)
         ttk.Label(type_frame, text="Art:").pack(side=tk.LEFT, padx=5)
 
@@ -95,7 +87,6 @@ class FileNameDialog(simpledialog.Dialog):
         rb2.pack(side=tk.LEFT, padx=5)
         type_frame.pack(pady=5)
 
-        # 2. Serial Number (Entry)
         num_frame = ttk.Frame(frame)
         ttk.Label(num_frame, text="Laufende Nummer (YYYY):").pack(side=tk.LEFT, padx=5)
 
@@ -104,22 +95,99 @@ class FileNameDialog(simpledialog.Dialog):
         self.entry_widget.pack(side=tk.LEFT)
         num_frame.pack(pady=5)
 
-        return self.entry_widget  # Set focus to the entry widget
+        return self.entry_widget
 
     def validate(self):
         serial_num = self.entry_var.get().strip()
         if not serial_num:
             messagebox.showwarning("Eingabe fehlt", "Bitte eine laufende Nummer eingeben.", parent=self)
-            return 0  # Validation failed
-
-        return 1  # Validation successful
+            return 0
+        return 1
 
     def apply(self):
-        # This is called when "OK" is pressed. Store the result.
         self.result = (self.doc_type_var.get(), self.entry_var.get().strip())
 
 
-# -----------------------------------------------
+class InitialConfigDialog(simpledialog.Dialog):
+    """Custom dialog for the first-time setup (RB, Network). Year is fixed."""
+
+    def __init__(self, parent, title, network_data):
+        self.network_data = network_data
+        self.result = None
+        super().__init__(parent, title)
+
+    def body(self, frame):
+        self.rb_var = tk.StringVar()
+        self.network_var = tk.StringVar()
+        # Year variable removed
+
+        # 1. Regionalbereich (RB)
+        rb_frame = ttk.Frame(frame)
+        ttk.Label(rb_frame, text="Regionalbereich (RB):").pack(side=tk.LEFT, padx=5, pady=5)
+        self.rb_combo = ttk.Combobox(rb_frame, textvariable=self.rb_var, state="readonly", width=30)
+        self.rb_combo['values'] = sorted(list(self.network_data.keys()))
+        self.rb_combo.pack(side=tk.LEFT, padx=5, pady=5)
+        rb_frame.pack()
+
+        # 2. Network
+        network_frame = ttk.Frame(frame)
+        ttk.Label(network_frame, text="Netz auswählen:").pack(side=tk.LEFT, padx=5, pady=5)
+        self.network_combo = ttk.Combobox(network_frame, textvariable=self.network_var, state="disabled", width=30)
+        self.network_combo.pack(side=tk.LEFT, padx=5, pady=5)
+        network_frame.pack()
+
+        # 3. Year (REMOVED)
+        # Static info label about the fixed year
+        year_info_label = ttk.Label(frame, text="Das Jahr ist fest auf 2026 eingestellt (Textbausteine 2026).",
+                                    font=("-default-", 9, "italic"))
+        year_info_label.pack(pady=(10, 0))
+
+        # Bind event
+        self.rb_combo.bind("<<ComboboxSelected>>", self._on_rb_selected)
+
+        return self.rb_combo  # Initial focus
+
+    def _on_rb_selected(self, event=None):
+        """Called when the RB combobox selection changes."""
+        selected_rb = self.rb_var.get()
+        networks = self.network_data.get(selected_rb, {})
+
+        # Format for display: "F33 - Netz Hagen"
+        network_display_list = []
+        for code, name in networks.items():
+            network_display_list.append(f"{code} - {name}")
+
+        if network_display_list:
+            self.network_combo['values'] = sorted(network_display_list)
+            self.network_combo.set(network_display_list[0])
+            self.network_combo.config(state="readonly")
+        else:
+            self.network_combo.set("")
+            self.network_combo.config(state="disabled")
+
+    def validate(self):
+        if not self.rb_var.get():
+            messagebox.showwarning("Eingabe fehlt", "Bitte einen Regionalbereich auswählen.", parent=self)
+            return 0
+        if not self.network_var.get():
+            messagebox.showwarning("Eingabe fehlt", "Bitte ein Netz auswählen.", parent=self)
+            return 0
+        return 1
+
+    def apply(self):
+        """Parses the result when OK is clicked."""
+        try:
+            # Parse "F33 - Netz Hagen"
+            full_network_string = self.network_var.get()
+            parts = full_network_string.split(" - ", 1)
+            code_full = parts[0].strip()
+            name = parts[1].strip()
+
+            # Year is no longer selected, it's hardcoded in ask_for_initial_config
+            self.result = (code_full, name)
+        except Exception as e:
+            print(f"Dialog apply error: {e}")
+            messagebox.showerror("Fehler", "Auswahl konnte nicht verarbeitet werden.", parent=self)
 
 
 class WordMergerApp:
@@ -128,13 +196,46 @@ class WordMergerApp:
         self.root.title("Betra Builder v" + APP_VERSION)
         self.root.geometry("1410x700")
 
-        # Determine base path for bundled (PyInstaller) or script execution
         if getattr(sys, 'frozen', False):
             base_path = os.path.dirname(sys.executable)
         else:
             base_path = os.path.dirname(os.path.abspath(__file__))
 
-        # Try to load application icon
+        self.load_icon(base_path)
+
+        # Define application paths
+        self.modules_dir = os.path.join(base_path, "modules")
+        self.output_dir = os.path.join(base_path, "output")
+        self.configs_dir = os.path.join(base_path, "configs")
+        self.config_file_path = os.path.join(self.configs_dir, "config.ini")
+        self.presets_file_path = os.path.join(self.configs_dir, "presets.ini")
+        self.network_data_file_path = os.path.join(self.configs_dir, "BetraNetzziffern.txt")
+
+        # Config Parsers
+        self.preset_config = configparser.ConfigParser()
+        self.presets = {}
+        self.config = configparser.ConfigParser()
+        self.settings = {}
+
+        # Data variables
+        self.network_data = {}  # Holds parsed BetraNetzziffern.txt
+        self.cover_pages = []
+        self.selected_cover_page = tk.StringVar()
+        self.checkbox_items = []
+
+        # Load Configs
+        self.load_or_create_network_data()  # Must be first
+        self.load_or_create_config()
+        self.load_or_create_presets()
+
+        # Build UI
+        self.create_main_widgets()
+
+        # Load module files into UI
+        self.load_files()
+
+    def load_icon(self, base_path):
+        """Try to load .ico, fallback to .png."""
         try:
             icon_path = os.path.join(base_path, "icon.ico")
             if os.path.exists(icon_path):
@@ -150,45 +251,41 @@ class WordMergerApp:
             except Exception as e:
                 print(f"Could not load icon: {e}")
 
-        # Define application paths
-        self.modules_dir = os.path.join(base_path, "modules")
-        self.output_dir = os.path.join(base_path, "output")
-        self.configs_dir = os.path.join(base_path, "configs")
-        self.config_file_path = os.path.join(self.configs_dir, "config.ini")
-
-        # --- (MODIFIZIERT) Config-Pfade erweitert ---
-        self.presets_file_path = os.path.join(self.configs_dir, "presets.ini")
-        self.preset_config = configparser.ConfigParser()
-        self.presets = {}
-        # --- ENDE MODIFIKATION ---
-
-        # --- CONFIGURATION LOGIC ---
-        self.config = configparser.ConfigParser()
-        self.settings = {}
-        self.load_or_create_config()
-        self.load_or_create_presets()  # --- NEU ---
-        # --- END CONFIGURATION LOGIC ---
-
-        self.checkbox_items = []  # Stores dicts of {var, path, filename, widget, is_mandatory}
-        main_frame = ttk.Frame(root, padding="10")
+    def create_main_widgets(self):
+        """Creates all widgets for the main application window."""
+        main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # --- Top Info Bar (NEW FRAME) ---
+        # Top Info Bar
         top_info_frame = ttk.Frame(main_frame)
-        top_info_frame.pack(fill=tk.X, anchor="n", pady=(0, 5))  # Pack at the top, fill horizontally
+        top_info_frame.pack(fill=tk.X, anchor="n", pady=(0, 5))
 
-        # 1. Module Path Label (packed left)
         info_label = ttk.Label(top_info_frame, text=f"Module aus: '{self.modules_dir}'",
                                font=("-default-", 9, "italic"))
         info_label.pack(side=tk.LEFT, anchor="w")
 
-        # 2. Config Settings Label (packed right)
-        config_text = f"Aktuelle Konfiguration: Code: {self.settings.get('regional_code', '??')}, Jahr: {self.settings.get('year', '??')}"
+        # --- MODIFIZIERT: Zeigt 20XX statt XX an ---
+        year_short = self.settings.get('year', '??')
+        year_display = f"20{year_short}" if year_short.isdigit() else "??"
+
+        config_text = f"Aktuelle Konfiguration: {self.settings.get('regional_code_full', '??')} ({self.settings.get('network_name', '???')}), Jahr: {year_display}"
+        # --- ENDE MODIFIKATION ---
+
         self.config_label = ttk.Label(top_info_frame, text=config_text, font=("-default-", 9, "italic"))
         self.config_label.pack(side=tk.RIGHT, anchor="e")
-        # --- End Top Info Bar ---
 
-        # --- SCROLLABLE AREA SETUP ---
+        # Cover Page Selector
+        cover_page_frame = ttk.Frame(main_frame)
+        cover_page_frame.pack(fill=tk.X, anchor="n", pady=(0, 10))
+
+        cover_label = ttk.Label(cover_page_frame, text="Deckblatt auswählen:", font=("-default-", 10, "bold"))
+        cover_label.pack(side=tk.LEFT, anchor="w")
+
+        self.cover_page_combo = ttk.Combobox(cover_page_frame, textvariable=self.selected_cover_page, state="readonly",
+                                             width=60)
+        self.cover_page_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+
+        # Scrollable Checkbox Area
         list_frame = ttk.Frame(main_frame, padding=(0, 10, 0, 0))
         list_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -198,7 +295,7 @@ class WordMergerApp:
         y_scrollbar.pack(side="right", fill="y")
 
         self.canvas = tk.Canvas(list_frame)
-        self.canvas.pack(side="left", fill="both", expand=True)
+        self.canvas.pack(side=tk.LEFT, fill="both", expand=True)
 
         self.canvas.configure(yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
         x_scrollbar.configure(command=self.canvas.xview)
@@ -207,23 +304,16 @@ class WordMergerApp:
         self.scrollable_frame = ttk.Frame(self.canvas)
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(
-                scrollregion=self.canvas.bbox("all")
-            )
-        )
+        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
 
-        # Bind mousewheel events for scrolling
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.canvas.bind("<Button-4>", self._on_mousewheel)  # Linux scroll up
-        self.canvas.bind("<Button-5>", self._on_mousewheel)  # Linux scroll down
+        self.canvas.bind("<Button-4>", self._on_mousewheel)
+        self.canvas.bind("<Button-5>", self._on_mousewheel)
         self.scrollable_frame.bind("<MouseWheel>", self._on_mousewheel)
         self.scrollable_frame.bind("<Button-4>", self._on_mousewheel)
         self.scrollable_frame.bind("<Button-5>", self._on_mousewheel)
-        # --- END SCROLLABLE AREA SETUP ---
 
-        # --- (MODIFIZIERT) CATEGORY BUTTONS ---
+        # Preset Buttons
         category_frame = ttk.Frame(main_frame)
         category_frame.pack(fill=tk.X, pady=(10, 5))
 
@@ -233,10 +323,9 @@ class WordMergerApp:
         self.preset_btn_container = ttk.Frame(category_frame)
         self.preset_btn_container.pack(fill=tk.X)
 
-        self.create_preset_buttons()  # --- NEU ---
-        # --- END CATEGORY BUTTONS ---
+        self.create_preset_buttons()
 
-        # --- (MODIFIZIERT) BOTTOM BUTTON BAR ---
+        # Bottom Button Bar
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(10, 0))
 
@@ -249,23 +338,69 @@ class WordMergerApp:
         self.reset_button = ttk.Button(button_frame, text="Auswahl zurücksetzen", command=self.reset_selection)
         self.reset_button.pack(side=tk.LEFT, padx=(5, 0))
 
-        # --- NEUER BUTTON ---
         self.edit_presets_button = ttk.Button(button_frame, text="Presets bearbeiten", command=self.open_preset_editor)
         self.edit_presets_button.pack(side=tk.LEFT, padx=(5, 0))
-        # --- ENDE NEU ---
 
         self.start_button = ttk.Button(button_frame, text="Ausgewählte Dateien zusammenfügen", command=self.start_merge)
         self.start_button.pack(side=tk.RIGHT)
         self.start_button["state"] = "disabled"
-        # --- END BOTTOM BUTTON BAR ---
 
-        self.load_files()
+    def load_or_create_network_data(self):
+        """Loads BetraNetzziffern.txt, or creates it if it doesn't exist."""
+        os.makedirs(self.configs_dir, exist_ok=True)
+        if not os.path.exists(self.network_data_file_path):
+            print(f"Datei '{self.network_data_file_path}' nicht gefunden, wird erstellt...")
+            try:
+                default_content = (
+                    "RB Ost\n"
+                    "S10, S-Bahn-Berlin\nF12, Netz Berlin\nF16, Netz Cottbus\nF18, Netz Schwerin\nF19, Netz Neustrelitz\n\n"
+                    "RB Nord\n"
+                    "F21, Netz Bremen\nF22, Netz Hamburg\nF23, Netz Hannover\nF24, Netz Kiel\nF25, Netz Osnabrück\n\n"
+                    "RB West\n"
+                    "F31, Netz Duisburg\nF32, Netz Düsseldorf\nF33, Netz Hagen\nF34, Netz Hamm\nF35, Netz Köln\n\n"
+                    "RB Südost\n"
+                    "F41, Netz Dresden\nF42, Netz Erfurt\nF43, Netz Halle(Saale)\nF44, Netz Leipzig\nF45, Netz Magdeburg\nF46, Netz Zwickau\n\n"
+                    "RB Mitte\n"
+                    "F51, Netz Frankfurt(Main)\nF52, Netz Kassel\nF53, Netz Koblenz\nF54, Netz Mainz\n\n"
+                    "RB Südwest\n"
+                    "F61, Netz Freiburg\nF62, Netz Karlsruhe\nF63, Netz Saarbrücken\nF64, Netz Stuttgart\nF65, Netz Ulm\n\n"
+                    "RB Süd\n"
+                    "F71, Netz Augsburg\nF72, Netz München\nF73, Netz Nürnberg\nF74, Netz Regensburg\nF75, Netz Würzburg\n"
+                )
+                with open(self.network_data_file_path, 'w', encoding='utf-8') as f:
+                    f.write(default_content)
+            except Exception as e:
+                messagebox.showerror("Kritischer Fehler",
+                                     f"Konnte '{self.network_data_file_path}' nicht erstellen: {e}")
+                self.root.quit()
+                return
+
+        # Now, parse the file
+        try:
+            with open(self.network_data_file_path, 'r', encoding='utf-8') as f:
+                current_rb = None
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if "," not in line:  # This is an RB header
+                        current_rb = line
+                        if current_rb not in self.network_data:
+                            self.network_data[current_rb] = {}
+                    else:  # This is a network line
+                        if current_rb is None:
+                            continue  # Skip lines before the first RB header
+                        parts = line.split(",", 1)
+                        if len(parts) == 2:
+                            code = parts[0].strip()
+                            name = parts[1].strip()
+                            self.network_data[current_rb][code] = name
+        except Exception as e:
+            messagebox.showerror("Kritischer Fehler", f"Konnte '{self.network_data_file_path}' nicht lesen: {e}")
+            self.root.quit()
 
     def load_or_create_config(self):
-        """
-        Loads the configuration from 'configs/config.ini'.
-        If the file or required settings are missing, triggers the first-time setup.
-        """
+        """Loads config.ini or triggers first-time setup."""
         os.makedirs(self.configs_dir, exist_ok=True)
         try:
             if not os.path.exists(self.config_file_path):
@@ -274,30 +409,33 @@ class WordMergerApp:
             self.config.read(self.config_file_path)
 
             if 'SETTINGS' not in self.config or \
-                    'RegionalCode' not in self.config['SETTINGS'] or \
+                    'RegionalCodeFull' not in self.config['SETTINGS'] or \
+                    'NetworkName' not in self.config['SETTINGS'] or \
                     'Year' not in self.config['SETTINGS']:
                 raise ValueError("Config file is incomplete.")
 
-            self.settings['regional_code'] = self.config['SETTINGS']['RegionalCode']
+            self.settings['regional_code_full'] = self.config['SETTINGS']['RegionalCodeFull']
+            self.settings['network_name'] = self.config['SETTINGS']['NetworkName']
             self.settings['year'] = self.config['SETTINGS']['Year']
 
-            if not self.settings['regional_code'] or not self.settings['year']:
+            # Ensure the loaded year is "26"
+            if self.settings['year'] != "26":
+                print("Alte Jahr-Einstellung gefunden. Erzwinge '26' für Modul-Kompatibilität.")
+                self.settings['year'] = "26"
+                self.config['SETTINGS']['Year'] = "26"
+                with open(self.config_file_path, 'w') as configfile:
+                    self.config.write(configfile)
+
+            if not self.settings['regional_code_full'] or not self.settings['network_name']:
                 raise ValueError("Config values are empty.")
 
         except Exception as e:
-            # If anything fails (file missing, section missing, keys missing, values empty):
-            # Run the first-time setup.
             print(f"Configuration error: {e}. Starting first-time setup...")
-            # We must set defaults here in case ask_for_initial_config is cancelled
-            self.settings = {'regional_code': '??', 'year': '??'}
-            self.root.after_idle(self.ask_for_initial_config)  # Call after main UI is built
+            self.settings = {'regional_code_full': '??', 'network_name': '???', 'year': '26'}
+            self.root.after_idle(self.ask_for_initial_config)
 
-    # --- NEUE METHODE ---
     def load_or_create_presets(self):
-        """
-        Loads presets from 'configs/presets.ini'.
-        If the file is missing or corrupt, creates default presets.
-        """
+        """Loads presets.ini, or creates defaults."""
         os.makedirs(self.configs_dir, exist_ok=True)
         try:
             if not os.path.exists(self.presets_file_path):
@@ -308,23 +446,21 @@ class WordMergerApp:
             for i in range(1, NUM_PRESETS + 1):
                 section = f'PRESET_{i}'
                 if section not in self.preset_config:
-                    raise ValueError(f"Preset-Sektion {section} fehlt.")
+                    raise ValueError(f"Preset section {section} missing.")
 
                 name = self.preset_config[section]['Name']
                 modules = self.preset_config[section]['Modules']
                 self.presets[section] = {'Name': name, 'Modules': modules}
 
             if len(self.presets) < NUM_PRESETS:
-                raise ValueError("Nicht alle Presets wurden gefunden.")
+                raise ValueError("Not all presets were found.")
 
         except Exception as e:
-            print(f"Preset-Konfigurationsfehler: {e}. Erstelle Standard-Presets.")
+            print(f"Preset config error: {e}. Creating default presets.")
             self.create_default_presets()
 
-    # --- NEUE METHODE ---
     def create_default_presets(self):
-        """Creates and saves default presets based on the old CATEGORIES."""
-        # Defaults based on old CATEGORIES dict
+        """Creates and saves default presets."""
         default_presets_data = {
             "Oberleitung": ["2.3.", "4.3.0", "5.3.20"],
             "Baugleis": ["5.1.11", "5.3.14", "5.3.15", "5.3.16", "5.3.17", "5.3.18", "5.3.21"],
@@ -334,7 +470,7 @@ class WordMergerApp:
         }
 
         self.presets.clear()
-        self.preset_config = configparser.ConfigParser()  # Clear old config
+        self.preset_config = configparser.ConfigParser()
 
         i = 1
         for name, modules_list in default_presets_data.items():
@@ -348,7 +484,6 @@ class WordMergerApp:
             self.presets[section] = {'Name': name, 'Modules': modules_str}
             i += 1
 
-        # Fill any remaining preset slots if NUM_PRESETS > 5
         while i <= NUM_PRESETS:
             section = f'PRESET_{i}'
             name = f"Preset {i}"
@@ -361,22 +496,18 @@ class WordMergerApp:
             with open(self.presets_file_path, 'w') as f:
                 self.preset_config.write(f)
         except Exception as e:
-            print(f"Konnte Standard-Presets nicht speichern: {e}")
+            print(f"Could not save default presets: {e}")
 
-    # --- NEUE METHODE ---
     def create_preset_buttons(self):
         """Clears and rebuilds the preset buttons from self.presets."""
-        # Clear existing buttons
         for widget in self.preset_btn_container.winfo_children():
             widget.destroy()
 
-        # Add dynamic preset buttons
         for i in range(1, NUM_PRESETS + 1):
             section = f'PRESET_{i}'
             name = self.presets[section]['Name']
             modules_str = self.presets[section]['Modules']
 
-            # Get prefixes from comma-separated string
             prefixes = [p.strip() for p in modules_str.split(',') if p.strip()]
 
             btn = ttk.Button(self.preset_btn_container,
@@ -384,32 +515,26 @@ class WordMergerApp:
                              command=lambda p=prefixes: self.toggle_category(p))
             btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
 
-        # Add the static "Alle" button (hardcoded)
         alle_prefixes = ["0.", "1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9."]
         alle_btn = ttk.Button(self.preset_btn_container,
                               text="Alle",
                               command=lambda p=alle_prefixes: self.toggle_category(p))
         alle_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=2)
 
-    # --- NEUE METHODE ---
     def open_preset_editor(self):
         """Opens a new Toplevel window to edit the presets."""
-
-        # Create the Toplevel window
         self.editor_window = tk.Toplevel(self.root)
         self.editor_window.title("Preset-Editor")
-        self.editor_window.transient(self.root)  # Keep on top
-        self.editor_window.grab_set()  # Modal behavior
+        self.editor_window.transient(self.root)
+        self.editor_window.grab_set()
         self.editor_window.resizable(False, False)
 
         main_frame = ttk.Frame(self.editor_window, padding=10)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create StringVars to hold the editor's content
         self.preset_name_vars = []
         self.preset_modules_vars = []
 
-        # Use a Notebook (Tabs) for clarity
         notebook = ttk.Notebook(main_frame)
         notebook.pack(pady=10, padx=10, fill="x", expand=True)
 
@@ -420,21 +545,18 @@ class WordMergerApp:
             tab_frame = ttk.Frame(notebook, padding="10")
             notebook.add(tab_frame, text=f"Preset {i}")
 
-            # Name Entry
             name_var = tk.StringVar(value=preset_data['Name'])
             self.preset_name_vars.append(name_var)
 
             ttk.Label(tab_frame, text="Button-Name:").pack(anchor="w")
             ttk.Entry(tab_frame, textvariable=name_var, width=50).pack(fill="x", anchor="w", pady=(0, 10))
 
-            # Modules Entry
             modules_var = tk.StringVar(value=preset_data['Modules'])
             self.preset_modules_vars.append(modules_var)
 
             ttk.Label(tab_frame, text="Modul-Präfixe (durch Komma getrennt):").pack(anchor="w")
             ttk.Entry(tab_frame, textvariable=modules_var, width=50).pack(fill="x", anchor="w")
 
-        # Save/Cancel buttons for the editor window
         editor_btn_frame = ttk.Frame(main_frame)
         editor_btn_frame.pack(fill="x", pady=(10, 0))
 
@@ -444,35 +566,27 @@ class WordMergerApp:
         save_btn = ttk.Button(editor_btn_frame, text="Speichern", command=self.save_presets)
         save_btn.pack(side=tk.RIGHT)
 
-    # --- NEUE METHODE ---
     def save_presets(self):
-        """Saves the edited presets from the editor window to file and memory."""
+        """Saves the edited presets to file and memory."""
         try:
             for i in range(1, NUM_PRESETS + 1):
                 section = f'PRESET_{i}'
                 name = self.preset_name_vars[i - 1].get()
                 modules = self.preset_modules_vars[i - 1].get()
 
-                # Validate: Name should not be empty
                 if not name.strip():
                     messagebox.showerror("Fehler", f"Der Name für Preset {i} darf nicht leer sein.",
                                          parent=self.editor_window)
                     return
 
-                # Update config object
                 self.preset_config[section]['Name'] = name
                 self.preset_config[section]['Modules'] = modules
-                # Update in-memory presets
                 self.presets[section] = {'Name': name, 'Modules': modules}
 
-            # Save to file
             with open(self.presets_file_path, 'w') as f:
                 self.preset_config.write(f)
 
-            # Refresh the main UI buttons
             self.create_preset_buttons()
-
-            # Close editor
             self.editor_window.destroy()
             messagebox.showinfo("Gespeichert", "Presets erfolgreich aktualisiert.", parent=self.root)
 
@@ -480,48 +594,45 @@ class WordMergerApp:
             messagebox.showerror("Fehler", f"Presets konnten nicht gespeichert werden:\n{e}", parent=self.editor_window)
 
     def ask_for_initial_config(self):
-        """
-        Prompts the user for initial settings (Regional Code, Year)
-        and saves them to config.ini.
-        """
+        """Runs the new custom dialog for first-time setup."""
+        if not self.network_data:
+            messagebox.showerror("Kritischer Fehler", "Netzwerkdaten sind nicht geladen. Konfiguration nicht möglich.")
+            self.root.quit()
+            return
+
         messagebox.showinfo("Erstkonfiguration",
-                            "Willkommen! Bitte gib deine Standardwerte ein.",
+                            "Willkommen! Bitte gib dein Standard-Netz ein.",
                             parent=self.root)
 
-        regional_code = simpledialog.askstring("Erstkonfiguration",
-                                               "Bitte regionalen Code eingeben (z.B. 33):",
-                                               parent=self.root)
-        # Abort if user cancels
-        if not regional_code:
-            messagebox.showerror("Abbruch", "Ohne regionalen Code kann das Programm nicht starten.")
+        dialog = InitialConfigDialog(self.root, "Erstkonfiguration", self.network_data)
+
+        if not dialog.result:
+            messagebox.showerror("Abbruch", "Ohne Konfiguration kann das Programm nicht starten.")
             self.root.quit()
             return
 
-        year = simpledialog.askstring("Erstkonfiguration",
-                                      "Bitte Jahr eingeben (z.B. 26 für 2026):",
-                                      parent=self.root)
-        # Abort if user cancels
-        if not year:
-            messagebox.showerror("Abbruch", "Ohne Jahr kann das Programm nicht starten.")
-            self.root.quit()
-            return
+        code_full, name = dialog.result
+        year_short = "26"  # Hardcoded to match modules
 
         # Save values to config file
         self.config['SETTINGS'] = {
-            'RegionalCode': regional_code,
-            'Year': year
+            'RegionalCodeFull': code_full,
+            'NetworkName': name,
+            'Year': year_short
         }
         with open(self.config_file_path, 'w') as configfile:
             self.config.write(configfile)
 
         # Save values to working memory
-        self.settings['regional_code'] = regional_code
-        self.settings['year'] = year
+        self.settings['regional_code_full'] = code_full
+        self.settings['network_name'] = name
+        self.settings['year'] = year_short
         messagebox.showinfo("Konfiguration", "Einstellungen erfolgreich gespeichert.", parent=self.root)
 
-        # --- (NEW) Update UI label now that we have the values ---
         if hasattr(self, 'config_label'):
-            config_text = f"Aktuelle Konfiguration: Code: {self.settings.get('regional_code', '??')}, Jahr: {self.settings.get('year', '??')}"
+            year_short = self.settings.get('year', '??')
+            year_display = f"20{year_short}" if year_short.isdigit() else "??"
+            config_text = f"Aktuelle Konfiguration: {self.settings.get('regional_code_full', '??')} ({self.settings.get('network_name', '???')}), Jahr: {year_display}"
             self.config_label.config(text=config_text)
 
     def _on_mousewheel(self, event):
@@ -540,17 +651,13 @@ class WordMergerApp:
             check_var.set(not check_var.get())
 
     def _get_layout_key(self, filename):
-        """
-        Determines the layout group (and column) for a file
-        based on its chapter number.
-        """
+        """Determines the layout group (and column) for a file."""
         parts = filename.split('.')
         if not parts:
             return "Unsorted"
 
         main_chapter = parts[0]
 
-        # Special handling for chapter 5 sub-sections (5.0, 5.1, etc.)
         if main_chapter == "5":
             if len(parts) > 1:
                 key = f"{parts[0]}.{parts[1]}"
@@ -560,34 +667,72 @@ class WordMergerApp:
         if main_chapter in COLUMN_LAYOUT:
             return main_chapter
 
-        return "Unsorted"  # Fallback for unclassified files
+        return "Unsorted"
 
     def load_files(self):
         """
-        Loads all .docx files from the 'modules' directory,
-        sorts them, and displays them in the scrollable UI.
+        Loads all .docx files, separating them into cover pages (for combobox)
+        and modules (for checkboxes).
         """
         if not os.path.isdir(self.modules_dir):
             messagebox.showerror("Fehler", f"Der Ordner '{self.modules_dir}' wurde nicht gefunden.")
             self.root.quit()
             return
 
-        # Clear existing UI elements
+        # --- Clear existing UI elements ---
         for item in self.checkbox_items:
-            item["checkbox"].destroy()
+            item["checkbox"].master.destroy()
         self.checkbox_items.clear()
 
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
 
-        # Find, sort, and process files
-        search_path = os.path.join(self.modules_dir, "*.docx")
-        file_paths = glob.glob(search_path)
-        file_paths.sort(key=natural_sort_key)
+        self.cover_pages.clear()
+        self.cover_page_combo['values'] = []
+        self.selected_cover_page.set("")
+        # --- End Clear ---
 
-        if not file_paths:
-            messagebox.showinfo("Keine Dateien", "Keine .docx Dateien im 'modules'-Ordner gefunden.")
+        search_path = os.path.join(self.modules_dir, "*.docx")
+        all_file_paths = glob.glob(search_path)
+
+        if not all_file_paths:
+            messagebox.showinfo("Keine Dateien", f"Keine .docx Dateien im Ordner '{self.modules_dir}' gefunden.")
             return
+
+        cover_page_files = []
+        module_files = []
+
+        for file_path in all_file_paths:
+            filename = os.path.basename(file_path)
+            if filename.startswith("0."):
+                cover_page_files.append(file_path)
+            else:
+                module_files.append(file_path)
+
+        # 1. Populate Cover Page ComboBox
+        cover_page_names = []
+        cover_page_files.sort(key=natural_sort_key)
+
+        for file_path in cover_page_files:
+            filename = os.path.basename(file_path)
+            display_name = os.path.splitext(filename)[0]
+            self.cover_pages.append({'name': display_name, 'path': file_path})
+            cover_page_names.append(display_name)
+
+        self.cover_page_combo['values'] = cover_page_names
+        if cover_page_names:
+            self.selected_cover_page.set(cover_page_names[0])
+        else:
+            messagebox.showwarning("Deckblatt fehlt",
+                                   f"Keine Deckblatt-Dateien (beginnend mit '0.') im Ordner '{self.modules_dir}' gefunden.\n Zusammenfügen ist nicht möglich.")
+            self.start_button["state"] = "disabled"
+
+        # 2. Populate Module Checkboxes
+        module_files.sort(key=natural_sort_key)
+
+        if not module_files and cover_page_files:
+            messagebox.showinfo("Keine Module",
+                                f"Keine Modul-Dateien (außer Deckblättern) im Ordner '{self.modules_dir}' gefunden.")
 
         wrap_length_pixels = 220
         main_columns = []
@@ -597,13 +742,12 @@ class WordMergerApp:
             main_col_frame.bind("<MouseWheel>", self._on_mousewheel)
             main_columns.append(main_col_frame)
 
-        group_frames = {}  # Cache for group frames
+        group_frames = {}
 
-        for file_path in file_paths:
+        for file_path in module_files:
             filename = os.path.basename(file_path)
             layout_key = self._get_layout_key(filename)
 
-            # Create a new group frame if it doesn't exist
             if layout_key not in group_frames:
                 main_col_index = COLUMN_LAYOUT.get(layout_key, NUM_MAIN_COLUMNS - 1)
                 parent_frame = main_columns[main_col_index]
@@ -618,7 +762,6 @@ class WordMergerApp:
 
                 group_frames[layout_key] = group_frame
 
-                # Bind mousewheel to group frames and titles as well
                 group_frame.bind("<MouseWheel>", self._on_mousewheel)
                 group_frame.bind("<Button-4>", self._on_mousewheel)
                 group_frame.bind("<Button-5>", self._on_mousewheel)
@@ -628,7 +771,6 @@ class WordMergerApp:
             else:
                 group_frame = group_frames[layout_key]
 
-            # Create checkbox item
             is_mandatory = filename in MANDATORY_FILES
             check_var = tk.BooleanVar(value=is_mandatory)
             cb_state = "disabled" if is_mandatory else "normal"
@@ -639,15 +781,13 @@ class WordMergerApp:
             checkbox = ttk.Checkbutton(item_frame, variable=check_var, state=cb_state)
             checkbox.pack(side=tk.LEFT, anchor="n", padx=(0, 5))
 
-            display_name = os.path.splitext(filename)[0]  # Remove .docx
+            display_name = os.path.splitext(filename)[0]
 
             label = ttk.Label(item_frame, text=display_name, wraplength=wrap_length_pixels, justify=tk.LEFT)
             label.pack(side=tk.LEFT, fill='x', expand=True)
 
-            # Bind click event to the label
             label.bind("<Button-1>", lambda e, w=checkbox, v=check_var: self._on_label_click(w, v))
 
-            # Bind mousewheel to all elements to ensure scrolling works
             item_frame.bind("<MouseWheel>", self._on_mousewheel)
             item_frame.bind("<Button-4>", self._on_mousewheel)
             item_frame.bind("<Button-5>", self._on_mousewheel)
@@ -666,7 +806,8 @@ class WordMergerApp:
                 "is_mandatory": is_mandatory
             })
 
-        self.start_button["state"] = "normal"  # Enable merge button after loading
+        if cover_page_files:
+            self.start_button["state"] = "normal"
 
     def reset_selection(self):
         """Resets all optional checkboxes to False."""
@@ -674,13 +815,10 @@ class WordMergerApp:
             if not item["is_mandatory"]:
                 item["check_var"].set(False)
             else:
-                item["check_var"].set(True)  # Ensure mandatory ones stay checked
+                item["check_var"].set(True)
 
     def toggle_category(self, prefixes):
-        """
-        Toggles all non-mandatory checkboxes whose filename starts
-        with one of the given prefixes.
-        """
+        """Toggles non-mandatory checkboxes matching the prefixes."""
         items_in_category = []
         for item in self.checkbox_items:
             if item["is_mandatory"] or item["checkbox"].cget("state") == "disabled":
@@ -689,34 +827,32 @@ class WordMergerApp:
             for prefix in prefixes:
                 if item["filename"].startswith(prefix):
                     items_in_category.append(item)
-                    break  # Go to next item once matched
+                    break
 
         if not items_in_category:
             return
 
-        # Toggle logic: If anything is deselected, select all.
-        # If all are selected, deselect all.
         is_anything_deselected = any(not item["check_var"].get() for item in items_in_category)
-        new_state = is_anything_deselected  # True (select all) or False (deselect all)
+        new_state = is_anything_deselected
 
         for item in items_in_category:
             item["check_var"].set(new_state)
 
     def show_help(self):
         """Displays the help/instructions messagebox."""
-        # --- (MODIFIZIERT) Anleitungstext angepasst ---
         help_text = (
-            "Anleitung Betra Builder\n\n"
-            "1. Pflichtmodule sind bereits ausgewählt und können nicht abgewählt werden.\n\n"
-            "2. Wählen Sie optionale Module aus, indem Sie die Haken setzen (Klick auf den Haken oder den Text).\n\n"
-            "3. Nutzen Sie die 'Presets'-Buttons, um gängige Modul-Gruppen schnell an- oder abzuwählen.\n\n"
-            "4. Mit 'Auswahl zurücksetzen' werden alle optionalen Module abgewählt.\n\n"
-            "5. Klicken Sie auf 'Ausgewählte Dateien zusammenfügen', geben Sie die laufende Nummer an und die Zieldatei wird erstellt.\n\n"
+            "Anleitung Betra Builder (v0.8b)\n\n"
+            "1. Wählen Sie oben das gewünschte Deckblatt aus der Liste aus.\n\n"
+            "2. Pflichtmodule sind bereits ausgewählt und können nicht abgewählt werden.\n\n"
+            "3. Wählen Sie optionale Module aus, indem Sie die Haken setzen (Klick auf den Haken oder den Text).\n\n"
+            "4. Nutzen Sie die 'Presets'-Buttons, um gängige Modul-Gruppen schnell an- oder abzuwählen.\n\n"
+            "5. Mit 'Auswahl zurücksetzen' werden alle optionalen Module abgewählt.\n\n"
+            "6. Klicken Sie auf 'Ausgewählte Dateien zusammenfügen', geben Sie die laufende Nummer an und die Zieldatei wird erstellt.\n\n"
             "--- \n"
             "Eigene Presets:\n"
             "Mit 'Presets bearbeiten' können Sie die 5 Preset-Buttons an Ihre Bedürfnisse anpassen.\n\n"
-            "Konfiguration (Code/Jahr):\n"
-            "Um den regionalen Code oder das Jahr (oben rechts) zu ändern, löschen Sie die Datei 'config.ini' im Ordner 'configs' und starten Sie das Programm neu."
+            "Konfiguration (Netz/Jahr):\n"
+            "Das Jahr ist auf 2026 festgelegt. Um Ihr Netz zu ändern, löschen Sie die Datei 'config.ini' im Ordner 'configs' und starten Sie das Programm neu."
         )
         messagebox.showinfo("Anleitung", help_text)
 
@@ -733,81 +869,91 @@ class WordMergerApp:
         messagebox.showinfo("Kontakt", contact_text)
 
     def start_merge(self):
-        """
-        Gathers selected files, asks for file name details,
-        and triggers the document merge process.
-        """
-        selected_files = []
-        for item in self.checkbox_items:
-            if item["check_var"].get():
-                selected_files.append(item["path"])
+        """Gathers selected files and triggers the document merge process."""
 
-        if not selected_files:
-            messagebox.showwarning("Keine Auswahl", "Es ist keine Datei ausgewählt.")
+        # 1. Get Cover Page
+        selected_cover_name = self.selected_cover_page.get()
+        if not selected_cover_name:
+            messagebox.showwarning("Deckblatt fehlt",
+                                   "Bitte ein Deckblatt aus der Liste auswählen, bevor Sie fortfahren.")
             return
 
-        # Ensure output directory exists
+        cover_path = ""
+        for cover in self.cover_pages:
+            if cover['name'] == selected_cover_name:
+                cover_path = cover['path']
+                break
+
+        if not cover_path or not os.path.exists(cover_path):
+            messagebox.showerror("Fehler", f"Die Deckblatt-Datei '{selected_cover_name}' konnte nicht gefunden werden.")
+            return
+
+        selected_files_for_merge = [cover_path]
+
+        # 2. Get Selected Modules
+        for item in self.checkbox_items:
+            if item["check_var"].get():
+                selected_files_for_merge.append(item["path"])
+
+        # 3. Validation
+        if len(selected_files_for_merge) == 1:
+            if not messagebox.askyesno("Warnung",
+                                       "Es sind keine Module ausgewählt.\n\nMöchten Sie nur das Deckblatt unter dem neuen Namen speichern?",
+                                       parent=self.root):
+                return
+
+        # 4. Ensure output directory exists
         try:
             os.makedirs(self.output_dir, exist_ok=True)
         except Exception as e:
             messagebox.showerror("Fehler", f"Konnte den Output-Ordner nicht erstellen:\n{e}")
             return
 
-        # --- NEW SAVING LOGIC ---
-
-        # 1. Open custom dialog for serial number and type
+        # 5. Get Filename
         dialog = FileNameDialog(self.root, "Dateiname festlegen")
-
-        # 2. Check if user clicked "OK" (dialog.result) or "Cancel" (None)
         if not dialog.result:
-            return  # User cancelled
+            return
 
         doc_type, serial_num = dialog.result
 
-        # 3. Assemble filename from config and dialog results
-        file_name = f"{doc_type} F{self.settings['regional_code']} {serial_num}-{self.settings['year']}.docx"
+        # This uses self.settings['year'] which is "26"
+        file_name = f"{doc_type} {self.settings['regional_code_full']} {serial_num}-{self.settings['year']}.docx"
         save_path = os.path.join(self.output_dir, file_name)
 
-        # 4. Check if file already exists
         if os.path.exists(save_path):
             if not messagebox.askyesno("Warnung",
                                        f"Die Datei:\n{file_name}\n\nexistiert bereits im Ordner 'output'.\nSoll sie überschrieben werden?",
                                        parent=self.root):
-                return  # User chose not to overwrite
+                return
 
-        # --- END NEW SAVING LOGIC ---
-
-        # Run the merge process
+        # 6. Run the merge process
         try:
             self.start_button.config(text="Arbeite...", state="disabled")
             self.root.update_idletasks()
 
-            self.merge_documents(selected_files, save_path)
+            self.merge_documents(selected_files_for_merge, save_path)
 
             messagebox.showinfo("Erfolg", f"Dateien erfolgreich zusammengefügt!\nGespeichert als: {save_path}")
         except Exception as e:
             messagebox.showerror("Fehler", f"Ein Fehler ist aufgetreten:\n{e}\n\n"
                                            f"Hinweis: Stellen Sie sicher, dass die Zieldatei (falls sie existiert) geschlossen ist.")
         finally:
-            # Restore button state
             self.start_button.config(text="Ausgewählte Dateien zusammenfügen", state="normal")
 
     def merge_documents(self, file_paths, save_path):
         """
-        Merges a list of .docx files into a single document at 'save_path'.
-        The first file in the list is used as the base document.
+        Merges a list of .docx files into a single document.
+        The first file (file_paths[0]) is the base document.
         """
         if not file_paths:
             return
 
         if not os.path.exists(file_paths[0]):
-            raise FileNotFoundError(f"Die Basis-Datei konnte nicht gefunden werden: {file_paths[0]}")
+            raise FileNotFoundError(f"Die Basis-Datei (Deckblatt) konnte nicht gefunden werden: {file_paths[0]}")
 
-        # Use the first selected file as the master
         master_doc = Document(file_paths[0])
         composer = Composer(master_doc)
 
-        # Append all subsequent files
         if len(file_paths) > 1:
             for file_path in file_paths[1:]:
                 if not os.path.exists(file_path):
@@ -817,7 +963,6 @@ class WordMergerApp:
                     doc_to_append = Document(file_path)
                     composer.append(doc_to_append)
                 except Exception as inner_exception:
-                    # Log error but try to continue
                     print(f"Error appending {file_path}: {inner_exception}")
                     pass
 
