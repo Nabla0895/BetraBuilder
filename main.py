@@ -58,7 +58,7 @@ COLUMN_LAYOUT = {
     "Unsorted": 5
 }
 NUM_MAIN_COLUMNS = 6
-APP_VERSION = "0.8a"  # Version erhöht
+APP_VERSION = "0.9a"  # Version erhöht
 
 
 # ---------------------
@@ -264,12 +264,10 @@ class WordMergerApp:
                                font=("-default-", 9, "italic"))
         info_label.pack(side=tk.LEFT, anchor="w")
 
-        # --- MODIFIZIERT: Zeigt 20XX statt XX an ---
         year_short = self.settings.get('year', '??')
         year_display = f"20{year_short}" if year_short.isdigit() else "??"
 
         config_text = f"Aktuelle Konfiguration: {self.settings.get('regional_code_full', '??')} ({self.settings.get('network_name', '???')}), Jahr: {year_display}"
-        # --- ENDE MODIFIKATION ---
 
         self.config_label = ttk.Label(top_info_frame, text=config_text, font=("-default-", 9, "italic"))
         self.config_label.pack(side=tk.RIGHT, anchor="e")
@@ -418,7 +416,6 @@ class WordMergerApp:
             self.settings['network_name'] = self.config['SETTINGS']['NetworkName']
             self.settings['year'] = self.config['SETTINGS']['Year']
 
-            # Ensure the loaded year is "26"
             if self.settings['year'] != "26":
                 print("Alte Jahr-Einstellung gefunden. Erzwinge '26' für Modul-Kompatibilität.")
                 self.settings['year'] = "26"
@@ -629,6 +626,7 @@ class WordMergerApp:
         self.settings['year'] = year_short
         messagebox.showinfo("Konfiguration", "Einstellungen erfolgreich gespeichert.", parent=self.root)
 
+        # Update UI label
         if hasattr(self, 'config_label'):
             year_short = self.settings.get('year', '??')
             year_display = f"20{year_short}" if year_short.isdigit() else "??"
@@ -841,13 +839,14 @@ class WordMergerApp:
     def show_help(self):
         """Displays the help/instructions messagebox."""
         help_text = (
-            "Anleitung Betra Builder (v0.8b)\n\n"
+            "Anleitung Betra Builder (v0.9a)\n\n"  # Version angepasst
             "1. Wählen Sie oben das gewünschte Deckblatt aus der Liste aus.\n\n"
             "2. Pflichtmodule sind bereits ausgewählt und können nicht abgewählt werden.\n\n"
             "3. Wählen Sie optionale Module aus, indem Sie die Haken setzen (Klick auf den Haken oder den Text).\n\n"
             "4. Nutzen Sie die 'Presets'-Buttons, um gängige Modul-Gruppen schnell an- oder abzuwählen.\n\n"
             "5. Mit 'Auswahl zurücksetzen' werden alle optionalen Module abgewählt.\n\n"
-            "6. Klicken Sie auf 'Ausgewählte Dateien zusammenfügen', geben Sie die laufende Nummer an und die Zieldatei wird erstellt.\n\n"
+            "6. Klicken Sie auf 'Ausgewählte Dateien zusammenfügen', geben Sie die laufende Nummer an.\n"
+            "   -> Die Datei wird im 'output'-Ordner in einem eigenen Unterordner gespeichert.\n\n"
             "--- \n"
             "Eigene Presets:\n"
             "Mit 'Presets bearbeiten' können Sie die 5 Preset-Buttons an Ihre Bedürfnisse anpassen.\n\n"
@@ -902,7 +901,7 @@ class WordMergerApp:
                                        parent=self.root):
                 return
 
-        # 4. Ensure output directory exists
+        # 4. Ensure *base* output directory exists
         try:
             os.makedirs(self.output_dir, exist_ok=True)
         except Exception as e:
@@ -916,17 +915,26 @@ class WordMergerApp:
 
         doc_type, serial_num = dialog.result
 
-        # This uses self.settings['year'] which is "26"
-        file_name = f"{doc_type} {self.settings['regional_code_full']} {serial_num}-{self.settings['year']}.docx"
-        save_path = os.path.join(self.output_dir, file_name)
+
+        base_name = f"{doc_type} {self.settings['regional_code_full']} {serial_num}-{self.settings['year']}"
+        new_folder_path = os.path.join(self.output_dir, base_name)
+        file_name_with_ext = f"{base_name}.docx"
+        save_path = os.path.join(new_folder_path, file_name_with_ext)
+
+        try:
+            os.makedirs(new_folder_path, exist_ok=True)
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Konnte den Unterordner nicht erstellen:\n{new_folder_path}\n\nFehler: {e}")
+            return
 
         if os.path.exists(save_path):
+            relative_file_name = os.path.join(base_name, file_name_with_ext)
             if not messagebox.askyesno("Warnung",
-                                       f"Die Datei:\n{file_name}\n\nexistiert bereits im Ordner 'output'.\nSoll sie überschrieben werden?",
+                                       f"Die Datei:\n{relative_file_name}\n\nexistiert bereits.\nSoll sie überschrieben werden?",
                                        parent=self.root):
                 return
 
-        # 6. Run the merge process
+        # 7. Run the merge process
         try:
             self.start_button.config(text="Arbeite...", state="disabled")
             self.root.update_idletasks()
