@@ -15,6 +15,7 @@ MANDATORY_FILES = [
     "1.0.0 - Lage der Baustelle, Lageplanskizze.docx",
     "2.1.0 - Arbeitszeit.docx",
     "2.2.0 - Dauer der Gleissperrungen, gesperrte Gleise, Weichen.docx",
+    "2.3.0 - Dauer der Ausschaltung der Oberleitung mit Angaben der Schaltgruppen.docx",
     "3.0.0 - Geschwindigkeitseinschränkungen und andere Besonderheiten für Zugfahrten.docx",
     "4.0.0 - Zuständige Berechtigte.docx",
     "4.1.0 - Fahrdienstleiter Weichenwärter Zugleiter BözM.docx",
