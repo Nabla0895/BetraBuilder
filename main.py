@@ -5,8 +5,8 @@ import glob
 import sys
 import re
 import configparser
-from datetime import datetime  # Neu für AEL-Datum
-import openpyxl  # Neu für Excel-Export (muss mit 'pip install openpyxl' installiert werden)
+from datetime import datetime
+import openpyxl
 from docx import Document
 from docxcompose.composer import Composer
 
@@ -60,7 +60,7 @@ COLUMN_LAYOUT = {
     "Unsorted": 5
 }
 NUM_MAIN_COLUMNS = 6
-APP_VERSION = "1.0a"  # Version erhöht
+APP_VERSION = "beta 1.0"
 
 
 # ---------------------
@@ -97,13 +97,11 @@ class FileNameDialog(simpledialog.Dialog):
         self.entry_widget.pack(side=tk.LEFT)
         num_frame.pack(pady=5)
 
-        # --- NEUE AEL-CHECKBOX ---
         ael_frame = ttk.Frame(frame)
         self.ael_var = tk.BooleanVar(value=False)
         ael_check = ttk.Checkbutton(ael_frame, text="AEL-Verrechnung", variable=self.ael_var)
         ael_check.pack(side=tk.LEFT, padx=5, pady=5)
         ael_frame.pack()
-        # --- ENDE NEU ---
 
         return self.entry_widget
 
@@ -115,7 +113,6 @@ class FileNameDialog(simpledialog.Dialog):
         return 1
 
     def apply(self):
-        # Result ist jetzt ein 3-Tuple
         self.result = (
             self.doc_type_var.get(),
             self.entry_var.get().strip(),
@@ -203,7 +200,7 @@ class InitialConfigDialog(simpledialog.Dialog):
 class WordMergerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Betra Builder v" + APP_VERSION)
+        self.root.title("<Betra Tool> v" + APP_VERSION)
         self.root.geometry("1410x700")
 
         if getattr(sys, 'frozen', False):
@@ -849,7 +846,7 @@ class WordMergerApp:
     def show_help(self):
         """Displays the help/instructions messagebox."""
         help_text = (
-            "Anleitung Betra Builder (v1.0a)\n\n"  # Version angepasst
+            "Kurznleitung\n\n"
             "1. Wählen Sie oben das gewünschte Deckblatt aus der Liste aus.\n\n"
             "2. Pflichtmodule sind bereits ausgewählt und können nicht abgewählt werden.\n\n"
             "3. Wählen Sie optionale Module aus, indem Sie die Haken setzen (Klick auf den Haken oder den Text).\n\n"
@@ -871,7 +868,7 @@ class WordMergerApp:
         """Displays the contact/support messagebox."""
         contact_text = (
                 "Kontakt & Support\n\n"
-                "Bei Fragen, Problemen, Ideen oder Vorschläge mit dem Betra Builder:\n\n"
+                "Bei Fragen, Problemen, Ideen oder Vorschläge mit dem Tool:\n\n"
                 "Name: Dennis Heinze, I.IA-W-N-HA-B\n"
                 "E-Mail: dennis.heinze@deutschebahn.com\n"
                 "Telefon (dienstlich): 0152 33114237\n"

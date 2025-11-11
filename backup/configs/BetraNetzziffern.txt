@@ -1,0 +1,48 @@
+RB Ost
+S10, S-Bahn-Berlin
+F12, Netz Berlin
+F16, Netz Cottbus
+F18, Netz Schwerin
+F19, Netz Neustrelitz
+
+RB Nord
+F21, Netz Bremen
+F22, Netz Hamburg
+F23, Netz Hannover
+F24, Netz Kiel
+F25, Netz Osnabrück
+
+RB West
+F31, Netz Duisburg
+F32, Netz Düsseldorf
+F33, Netz Hagen
+F34, Netz Hamm
+F35, Netz Köln
+
+RB Südost
+F41, Netz Dresden
+F42, Netz Erfurt
+F43, Netz Halle(Saale)
+F44, Netz Leipzig
+F45, Netz Magdeburg
+F46, Netz Zwickau
+
+RB Mitte
+F51, Netz Frankfurt(Main)
+F52, Netz Kassel
+F53, Netz Koblenz
+F54, Netz Mainz
+
+RB Südwest
+F61, Netz Freiburg
+F62, Netz Karlsruhe
+F63, Netz Saarbrücken
+F64, Netz Stuttgart
+F65, Netz Ulm
+
+RB Süd
+F71, Netz Augsburg
+F72, Netz München
+F73, Netz Nürnberg
+F74, Netz Regensburg
+F75, Netz Würzburg
