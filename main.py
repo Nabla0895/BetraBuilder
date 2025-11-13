@@ -6,7 +6,7 @@ import sys
 import re
 import configparser
 from datetime import datetime
-import openpyxl  # (Muss mit 'pip install openpyxl' installiert werden)
+import openpyxl
 from openpyxl.styles import PatternFill
 from docx import Document
 from docxcompose.composer import Composer
