@@ -7,7 +7,7 @@ import re
 import configparser
 from datetime import datetime
 import openpyxl
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from docx import Document
 from docxcompose.composer import Composer
 
@@ -61,7 +61,7 @@ COLUMN_LAYOUT = {
     "Unsorted": 5
 }
 NUM_MAIN_COLUMNS = 6
-APP_VERSION = "1.3b"
+APP_VERSION = "1.4b"
 
 # ---------------------
 
@@ -256,7 +256,7 @@ class AelDetailsDialog(simpledialog.Dialog):
 class WordMergerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Betra Komposer v" + APP_VERSION)
+        self.root.title("<BetraTool> v" + APP_VERSION)
         self.root.geometry("1410x700")
 
         if getattr(sys, 'frozen', False):
@@ -1044,9 +1044,18 @@ class WordMergerApp:
         fill_yellow_header = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
         fill_red_header = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
         fill_yellow_row = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+
+        header_font = Font(name='DB Neo Office Head', size=11, bold=True)
+        data_font = Font(name='Db Neo Office', size=11, bold=False)
         
         # Column indices (0-based) for red header color: I, J, K, O, P
         red_header_indices = [8, 9, 10, 14, 15] 
+
+        thin_border_side = Side(border_style="thin", color="000000")
+        full_border = Border(left=thin_border_side, right=thin_border_side, top=thin_border_side, bottom=thin_border_side)
+        
+        # Header alignment
+        header_alignment = Alignment(wrap_text=True, horizontal='center', vertical='center')
 
         try:
             if not os.path.exists(excel_path):
@@ -1055,24 +1064,41 @@ class WordMergerApp:
                 sheet.title = "AEL-Aufträge"
                 sheet.append(headers)
                 
-                # Apply header colors
+                # Apply header styles (color, font, border, alignment)
                 for col_idx, cell in enumerate(sheet[1], 1): # 1-based index
                     if (col_idx - 1) in red_header_indices:
                         cell.fill = fill_red_header
                     else:
                         cell.fill = fill_yellow_header
+                    cell.border = full_border
+                    cell.font = header_font
+                    cell.alignment = header_alignment
                 
                 sheet.append(new_row_data)
+                # Apply data styles (font, border)
+                new_row_index = sheet.max_row
+                for cell in sheet[new_row_index]:
+                    cell.border = full_border
+                    cell.font = data_font
+
             else:
                 wb = openpyxl.load_workbook(excel_path)
                 sheet = wb.active
                 sheet.append(new_row_data)
+                
+                # Apply data styles (font, border)
+                new_row_index = sheet.max_row
+                for cell in sheet[new_row_index]:
+                    cell.border = full_border
+                    cell.font = data_font
             
-            # Apply row color if needed
+            # Apply row color if needed (overwrites border fill, so border must be applied first)
             if leistung_dritte:
                 new_row_index = sheet.max_row 
                 for cell in sheet[new_row_index]:
                     cell.fill = fill_yellow_row
+                    cell.border = full_border # Ensure border is re-applied
+                    cell.font = data_font     # Ensure font is re-applied
             
             # Auto-adjust column width
             for col in sheet.columns:
